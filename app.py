@@ -211,8 +211,37 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tidak ada teks lain):
 }}
 """
                     try:
-                        model = genai.GenerativeModel("gemini-2.0-flash")
-                        response = model.generate_content(prompt)
+                        # Model fallback: coba flash dulu, kalau rate limited coba lite
+                        models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+                        response = None
+                        used_model = None
+
+                        for model_name in models_to_try:
+                            try:
+                                model = genai.GenerativeModel(model_name)
+                                response = model.generate_content(prompt)
+                                used_model = model_name
+                                break
+                            except Exception as api_err:
+                                err_str = str(api_err).lower()
+                                if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                                    if model_name != models_to_try[-1]:
+                                        st.info(f"⏳ {model_name} rate limited, mencoba {models_to_try[models_to_try.index(model_name)+1]}...")
+                                        continue
+                                    else:
+                                        raise Exception(
+                                            "⚡ Quota API habis untuk semua model.\n\n"
+                                            "**Solusi:**\n"
+                                            "1. Tunggu beberapa menit lalu coba lagi\n"
+                                            "2. Buat API Key baru di [aistudio.google.com](https://aistudio.google.com/apikey)\n"
+                                            "3. Upgrade ke paid tier untuk limit lebih besar"
+                                        )
+                                else:
+                                    raise
+
+                        if response is None:
+                            raise Exception("Tidak ada respons dari API. Coba lagi.")
+
                         raw = response.text.strip()
 
                         if "```json" in raw:
@@ -235,12 +264,13 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tidak ada teks lain):
                             "beban": beban, "ai_result": data
                         }
 
+                        model_badge = f"<span style='font-family:monospace;font-size:0.6rem;color:#555;background:#1a1a1a;padding:2px 8px;border-radius:4px;margin-left:8px'>{used_model}</span>"
                         sev_label = '🔴 KRITIS' if severity == 'HIGH' else '🟡 PERHATIAN' if severity == 'MEDIUM' else '🟢 AMAN'
                         result_placeholder.markdown(f"""
                         <div class='result-box'>
                             <div class='severity-badge severity-{severity}'>{sev_label} · {severity}</div>
                             <div style='font-size:1.4rem;font-weight:800;margin-bottom:4px'>{machine_name}</div>
-                            <div style='font-family:monospace;font-size:0.72rem;color:#555'>{machine_type} · {machine_age} tahun</div>
+                            <div style='font-family:monospace;font-size:0.72rem;color:#555'>{machine_type} · {machine_age} tahun {model_badge}</div>
                             <div class='result-section-title'>// Kemungkinan Kerusakan</div>
                             <div class='result-content'>{data.get('kemungkinan_kerusakan', '-')}</div>
                             <div class='result-section-title'>// Komponen Berisiko</div>
@@ -269,7 +299,20 @@ Berikan analisis dalam format JSON berikut (HANYA JSON, tidak ada teks lain):
                     except json.JSONDecodeError:
                         result_placeholder.error("❌ Gagal parsing respons AI. Coba lagi.")
                     except Exception as e:
-                        result_placeholder.error(f"❌ Error: {str(e)}")
+                        error_msg = str(e)
+                        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+                            result_placeholder.warning(
+                                "⚡ **Quota API Habis**\n\n"
+                                "Free tier Gemini API sudah mencapai batas.\n\n"
+                                "**Solusi:**\n"
+                                "1. Tunggu beberapa menit lalu coba lagi\n"
+                                "2. Buat API Key baru di [aistudio.google.com](https://aistudio.google.com/apikey)\n"
+                                "3. Upgrade ke paid tier untuk limit lebih besar"
+                            )
+                        elif "api key" in error_msg.lower() or "invalid" in error_msg.lower():
+                            result_placeholder.error("🔑 **API Key tidak valid.** Periksa kembali API Key di sidebar.")
+                        else:
+                            result_placeholder.error(f"❌ Error: {error_msg}")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
