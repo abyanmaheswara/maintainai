@@ -1,0 +1,12 @@
+# Pyrefly Configuration for MaintainAI
+# Suppress false positives from CSS/HTML in st.markdown() strings
+
+# Exclude virtual/in-memory files and cache
+project-excludes = [
+    "__pyrefly_virtual__/**",
+    "__pycache__/**",
+]
+
+[errors]
+# Disable module-not-found warnings (plotly, etc. installed in venv)
+cannot-find-module = false
