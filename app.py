@@ -71,12 +71,19 @@ with st.sidebar:
 
     api_key = st.text_input("Gemini API Key", type="password", placeholder="AIza...", help="Dapetin di aistudio.google.com")
     if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            st.session_state.api_configured = True
-            st.success("✓ API terhubung")
-        except Exception:
-            st.error("API Key tidak valid")
+        if not api_key.startswith("AIza") or len(api_key) < 35:
+            st.error("❌ API Key tidak valid — format salah")
+            st.session_state.api_configured = False
+        else:
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                model.generate_content("test", generation_config={"max_output_tokens": 1})
+                st.session_state.api_configured = True
+                st.success("✓ API terhubung")
+            except Exception:
+                st.error("❌ API Key tidak valid")
+                st.session_state.api_configured = False
 
     st.markdown("<hr>", unsafe_allow_html=True)
     stats = get_stats()
